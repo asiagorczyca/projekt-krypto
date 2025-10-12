@@ -128,7 +128,10 @@ int main()
  
         while (1)
         {
-            getline(cin, sent_message);
+            sent_message="";
+            while(sent_message.length() == 0) {
+                getline(cin, sent_message);
+            }
             // add validation for data - empty message causes an error in send()
             iResult = send(client.socket, sent_message.c_str(), strlen(sent_message.c_str()), 0);
  
