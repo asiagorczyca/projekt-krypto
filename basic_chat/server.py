@@ -1,8 +1,12 @@
 import socket
 import threading
 
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("8.8.8.8", 80))
+HOST = s.getsockname()[0]
+s.close()
+
 # Server IP and Port configuration
-HOST = socket.gethostbyname(socket.gethostname())  # Server IP (localhost)
 PORT = 65432        # Port for client connections
 MAX_CLIENTS = 2
 
