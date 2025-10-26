@@ -1,6 +1,6 @@
 import random
 
-# -------------------- Miller-Rabin --------------------
+
 def is_probable_prime(n: int, rounds: int = 10) -> bool:
     if n < 2:
         return False
@@ -9,7 +9,6 @@ def is_probable_prime(n: int, rounds: int = 10) -> bool:
         if n % p == 0:
             return n == p
 
-    # zapisz n-1 = d * 2^s
     d = n - 1
     s = 0
     while d % 2 == 0:
@@ -29,7 +28,6 @@ def is_probable_prime(n: int, rounds: int = 10) -> bool:
             return False
     return True
 
-# -------------------- Generowanie liczby pierwszej p --------------------
 def generate_random_odd(bits: int) -> int:
     x = random.randint(2**(bits-1), 2**bits - 1)
     if x % 2 == 0:
@@ -42,15 +40,14 @@ def generate_prime(bits: int) -> int:
         if is_probable_prime(p):
             return p
 
-# -------------------- Generator g --------------------
 def find_generator(p: int) -> int:
     for _ in range(1000):
         g = random.randint(2, p - 2)
-        if pow(g, (p-1)//2, p) != 1:  # unikamy trywialnego rzędu 2
+        if pow(g, (p-1)//2, p) != 1:  
             return g
-    return 2  # fallback
+    return 2  
 
-# -------------------- Klucze --------------------
+
 def generate_private(p: int) -> int:
     return random.randint(2, p - 2)
 
@@ -59,8 +56,6 @@ def compute_public(g: int, priv: int, p: int) -> int:
 
 def compute_shared(priv: int, peer_pub: int, p: int) -> int:
     return pow(peer_pub, priv, p)
-
-# -------------------- Demo --------------------
 def dh_demo(bits: int):
     print(f"[INFO] Generacja p ({bits} bitów)...")
     p = generate_prime(bits)
@@ -85,6 +80,5 @@ def dh_demo(bits: int):
     print(f"Sekret Bob:   {S_b}")
     print(f"Sekrety się zgadzają? {'Tak' if S_a == S_b else 'Nie'}")
 
-# -------------------- Uruchomienie --------------------
 if __name__ == "__main__":
-    dh_demo(bits=512)  
+    dh_demo(bits=2088)  
