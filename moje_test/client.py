@@ -2,7 +2,7 @@ import socket
 import threading
 
 # Client IP and Port configuration
-HOST = socket.gethostbyname(socket.gethostname())   # Server's IP address (localhost)
+HOST = ''   # Server's IP address (localhost)
 PORT = 65432        # Port the server is listening on
 
 def receive_messages(client_socket):
@@ -41,6 +41,7 @@ def start_client():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             try:
+                HOST = input("Podaj adres IP serwera: ")
                 client_socket.connect((HOST, PORT))  # Connect to the server
                 print(f"Connected to server at {HOST}:{PORT}")
                 print("You can now chat with other connected users!")
@@ -79,4 +80,5 @@ def start_client():
     print("Connection terminated.")
 
 if __name__ == "__main__":
+    print(HOST)
     start_client()

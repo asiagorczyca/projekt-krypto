@@ -50,6 +50,7 @@ def handle_client(conn, addr):
             print(f"Received from {addr}: {message}")
             
             # Broadcast the message to all other clients
+            # funkcja do wymiany kluczy 
             broadcast_message(addr, f"User {addr}: {message}")
             
         except ConnectionResetError:
@@ -92,4 +93,5 @@ def start_server():
             thread.start()
 
 if __name__ == "__main__":
+    print(HOST)
     start_server()
