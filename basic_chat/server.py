@@ -46,7 +46,7 @@ def handle_client(conn, addr):
     
     while True:
         try:
-            data = conn.recv(1024)  # Receive data from the client
+            data = conn.recv(4096)  # Receive data from the client
             if not data:
                 break  # Terminate the connection if no data is received
             

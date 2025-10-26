@@ -51,11 +51,14 @@ def find_generator(p: int) -> int:
 def generate_private(p: int) -> int:
     return random.randint(2, p - 2)
 
+# change into one funkction 
+
 def compute_public(g: int, priv: int, p: int) -> int:
     return pow(g, priv, p)
 
 def compute_shared(priv: int, peer_pub: int, p: int) -> int:
     return pow(peer_pub, priv, p)
+
 def dh_demo(bits: int):
     print(f"[INFO] Generacja p ({bits} bitów)...")
     p = generate_prime(bits)
