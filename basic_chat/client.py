@@ -41,7 +41,7 @@ def start_client():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             try:
-                HOST = input("Podaj adres IP serwera: ")
+                HOST = input("Input server's IP address: ")
                 client_socket.connect((HOST, PORT))  # Connect to the server
                 print(f"Connected to server at {HOST}:{PORT}")
                 print("You can now chat with other connected users!")
