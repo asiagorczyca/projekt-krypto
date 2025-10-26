@@ -1,109 +1,84 @@
 import random
-import math
 
-def is_prime(n, k=40):
-    if n <= 1:
+
+def is_probable_prime(n: int, rounds: int = 10) -> bool:
+    if n < 2:
         return False
-    if n <= 3:
-        return True
-    if n % 2 == 0:
-        return False
+    small_primes = (2,3,5,7,11,13,17,19,23,29)
+    for p in small_primes:
+        if n % p == 0:
+            return n == p
 
     d = n - 1
-    r = 0
+    s = 0
     while d % 2 == 0:
         d //= 2
-        r += 1
+        s += 1
 
-    for _ in range(k):
-        a = random.randrange(2, n - 1)
+    for _ in range(rounds):
+        a = random.randint(2, n - 2)
         x = pow(a, d, n)
-
         if x == 1 or x == n - 1:
             continue
-
-        is_composite = True
-        for _ in range(r - 1):
+        for _ in range(s - 1):
             x = pow(x, 2, n)
             if x == n - 1:
-                is_composite = False
                 break
-        
-        if is_composite:
+        else:
             return False
-
     return True
 
-def generate_prime(bits):
+def generate_random_odd(bits: int) -> int:
+    x = random.randint(2**(bits-1), 2**bits - 1)
+    if x % 2 == 0:
+        x += 1
+    return x
+
+def generate_prime(bits: int) -> int:
     while True:
-        p = random.randrange(2**(bits-1), 2**bits)
-        if p % 2 == 0:
-            p += 1
-        
-        if is_prime(p):
+        p = generate_random_odd(bits)
+        if is_probable_prime(p):
             return p
 
-def get_prime_factors(n):
-    factors = set()
-    d = 2
-    temp_n = n
-    while d * d <= temp_n:
-        if temp_n % d == 0:
-            factors.add(d)
-            while temp_n % d == 0:
-                temp_n //= d
-        d += 1
-    if temp_n > 1:
-        factors.add(temp_n)
-    return factors
-
-def is_primitive_root(g, p):
-    if not (1 <= g < p):
-        return False
-
-    phi = p - 1
-    prime_factors_phi = get_prime_factors(phi)
-
-    for q in prime_factors_phi:
-        if pow(g, phi // q, p) == 1:
-            return False
-            
-    return True
-
-def find_primitive_root(p):
-    for g in range(2, p):
-        if is_primitive_root(g, p):
+def find_generator(p: int) -> int:
+    for _ in range(1000):
+        g = random.randint(2, p - 2)
+        if pow(g, (p-1)//2, p) != 1:  
             return g
-    return None
+    return 2  
 
-def main():
-    PRIME_BITS = 16 
-    P = generate_prime(PRIME_BITS)
-    print("The value of P (generated prime):", P)
-    
-    G = find_primitive_root(P)
-    if G is None:
-        print(f"Could not find a generator for P={P}")
-        return
-        
-    print("The value of G (found generator):", G)
-    
-    a = random.randint(2, P - 2)
-    print("The private key a for Alice:", a)
-    
-    b = random.randint(2, P - 2)
-    print("The private key b for Bob:", b)
-    
-    x = pow(G, a, P)
-    y = pow(G, b, P)
-    
-    ka = pow(y, a, P)
-    kb = pow(x, b, P)
 
-    print("Secret key for Alice is:", ka)
-    print("Secret key for Bob is:", kb)
+def generate_private(p: int) -> int:
+    return random.randint(2, p - 2)
 
-    assert ka == kb
+def compute_public(g: int, priv: int, p: int) -> int:
+    return pow(g, priv, p)
+
+def compute_shared(priv: int, peer_pub: int, p: int) -> int:
+    return pow(peer_pub, priv, p)
+def dh_demo(bits: int):
+    print(f"[INFO] Generacja p ({bits} bitów)...")
+    p = generate_prime(bits)
+    print(f"Wygenerowano p: {p}")
+
+    g = find_generator(p)
+    print(f"Generator g: {g}")
+
+    # klucze Alice i Bob
+    a_priv = generate_private(p)
+    b_priv = generate_private(p)
+    A_pub = compute_public(g, a_priv, p)
+    B_pub = compute_public(g, b_priv, p)
+
+    print(f"\nPublic Alice: {A_pub}")
+    print(f"Public Bob:   {B_pub}")
+
+    S_a = compute_shared(a_priv, B_pub, p)
+    S_b = compute_shared(b_priv, A_pub, p)
+
+    print(f"\nSekret Alice: {S_a}")
+    print(f"Sekret Bob:   {S_b}")
+    print(f"Sekrety się zgadzają? {'Tak' if S_a == S_b else 'Nie'}")
 
 if __name__ == "__main__":
-    main()
+    dh_demo(bits=2088)  
