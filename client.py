@@ -1,10 +1,47 @@
+# client.py (poprawiona wersja)
 import socket
 import threading
 import podstawa_krypto.df_imp.implementation as imp
+import hashlib
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from base64 import b64encode, b64decode
 
-# Client IP and Port configuration
-HOST = ''   # Server's IP address (localhost)
-PORT = 65432        # Port the server is listening on
+HOST = ''   # zostawiam, ale poniżej nadpisuję w start_client (tak jak w Twoim oryginale)
+PORT = 65432
+
+# Globalna zmienna przechowująca hash(shared_secret) jako bajty; ustawiana po wymianie DH
+hash_z_shared_key = None
+
+# Stały IV (zgodnie z Twoim założeniem 'obie strony mają stałe iv')
+# UWAGA: w praktyce: nie używaj stałego IV dla CBC. Tu robimy to świadomie (Twoje założenie).
+IV = b'0123456789abcdef'  # 16 bajtów
+
+def decrypt_message_if_enc(raw_text: str):
+    """Jeżeli raw_text zawiera tag 'ENC:' spróbuj odszyfrować treść; zwróć krotkę (ok, text_or_error, decrypted_bool)."""
+    global hash_z_shared_key
+    if "ENC:" not in raw_text:
+        return raw_text, False
+
+    try:
+        # znajdź ostatnie wystąpienie 'ENC:' i pobierz to, co po nim (bez dodatkowych spacji)
+        idx = raw_text.rfind("ENC:")
+        b64part = raw_text[idx + len("ENC:"):].strip()
+        ct = b64decode(b64part)
+    except Exception as e:
+        return f"[ENC decode error: {e}] {raw_text}", False
+
+    if not hash_z_shared_key:
+        return "[ENCRYPTED MESSAGE: brak wspólnego klucza — nie można odszyfrować] " + raw_text, False
+
+    try:
+        key = hash_z_shared_key[:16]  # AES-128
+        cipher = AES.new(key, AES.MODE_CBC, IV)
+        pt_padded = cipher.decrypt(ct)
+        pt = unpad(pt_padded, AES.block_size).decode('utf-8', errors='replace')
+        return pt, True
+    except Exception as e:
+        return f"[Decrypt error: {e}] {raw_text}", False
 
 def receive_messages(client_socket):
     """Handle incoming messages from the server in a separate thread"""
@@ -12,27 +49,28 @@ def receive_messages(client_socket):
     secret = None
     p = None
     g = None
-    
+    global hash_z_shared_key
+
     while True:
         try:
-            data = client_socket.recv(1024)
+            data = client_socket.recv(4096)
             if not data:
                 print("\nServer closed the connection")
                 break
-            
-            message = data.decode()
 
-            # The server may send multiple newline-delimited messages in one TCP packet.
+            message = data.decode(errors='replace')
+
+            # Server może wysłać kilka linii naraz
             for raw in message.splitlines():
                 if not raw:
                     continue
 
-                # Check if server sent a rejection message
-                if "SERVER_FULL" in raw:
+                # rejection
+                if raw.startswith("SERVER_FULL"):
                     print(f"\nServer rejected connection: {raw.split(':', 1)[1].strip()}")
                     return
 
-                # Handle DH parameters from server (starts when both clients are connected)
+                # DH_START
                 if raw.startswith("DH_START:") and not dh_started:
                     parts = raw.split(":", 2)
                     try:
@@ -54,7 +92,7 @@ def receive_messages(client_socket):
                     dh_started = True
                     continue
 
-                # Handle peer's public key
+                # PEER_PUBLIC
                 if raw.startswith("PEER_PUBLIC:"):
                     try:
                         peer_public = int(raw.split(":", 1)[1])
@@ -65,23 +103,38 @@ def receive_messages(client_socket):
 
                     # Compute shared secret
                     if secret and p:
-                        shared_key = imp.compute_shared(secret, peer_public, p)
-                        print(f"Computed shared secret: {shared_key}")
+                        shared_int = imp.compute_shared(secret, peer_public, p)
+                        # Convert integer -> bytes deterministically
+                        if shared_int == 0:
+                            shared_bytes = b'\x00'
+                        else:
+                            blen = (shared_int.bit_length() + 7) // 8
+                            shared_bytes = shared_int.to_bytes(blen, 'big')
+                        # Hash the shared secret to derive symmetric key material
+                        hash_z_shared_key = hashlib.sha3_256(shared_bytes).digest()
+                        print(f"Computed shared secret and derived key (sha3_256).")
+                        # For debugging you previously printed raw digest; keep short info only
+                        print(f"[INFO] Derived key (SHA3-256) length: {len(hash_z_shared_key)} bytes.")
+                    else:
+                        print("Brak prywatnego klucza lokalnego lub p; nie można compute_shared.")
                     continue
 
-                # Handle secure channel establishment
+                # SECURE_CHANNEL_ESTABLISHED
                 if "SECURE_CHANNEL_ESTABLISHED" in raw:
                     print(f"\n{raw}")
-                    print("Enter your secure message (type 'exit' to quit): ", end="")
+                    print("Enter your secure message (type 'exit' to quit): ", end="", flush=True)
                     continue
 
-                # Handle regular chat messages and system messages
-                print(f"\n{raw}")
-                if "joined" in raw or "left" in raw:
-                    print("Enter your message (type 'exit' to quit): ", end="")
+                # Normal / System messages or broadcasted messages
+                # Try to detect and decrypt ENC: payloads
+                decrypted_text, was_decrypted = decrypt_message_if_enc(raw)
+                if was_decrypted:
+                    print(f"\n[DECRYPTED] {decrypted_text}")
                 else:
-                    print("Enter your message (type 'exit' to quit): ", end="")
-            
+                    print(f"\n{decrypted_text}")
+
+                print("Enter your message (type 'exit' to quit): ", end="", flush=True)
+
         except ConnectionResetError:
             print("\nConnection reset by server")
             break
@@ -95,48 +148,63 @@ def receive_messages(client_socket):
             print(f"\nCommunication error: {e}")
             break
 
-# Start the client
 def start_client():
+    global hash_z_shared_key
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             try:
-                HOST = input("Input server's IP address: ")
-                client_socket.connect((HOST, PORT))
-                print(f"Connected to server at {HOST}:{PORT}")
+                # Możesz odkomentować linię poniżej żeby wpisać adres ręcznie:
+                # HOST = input("Input server's IP address: ")
+                HOST_TO_USE = "10.101.11.62"  # tak jak w Twoim oryginale
+                client_socket.connect((HOST_TO_USE, PORT))
+                print(f"Connected to server at {HOST_TO_USE}:{PORT}")
                 print("Waiting for another user to connect...")
                 print("Type 'exit' to quit\n")
-                
+
             except ConnectionRefusedError:
                 print("Connection refused: Server is not running or not accepting connections")
                 return
             except Exception as e:
                 print(f"Connection error: {e}")
                 return
-            
-            # Start a thread to receive messages
+
+            # Start receiver thread
             receive_thread = threading.Thread(target=receive_messages, args=(client_socket,))
             receive_thread.daemon = True
             receive_thread.start()
-            
+
+            # Main send loop
             while True:
                 try:
                     message = input("Enter your message (type 'exit' to quit): ")
                     if message.lower() == 'exit':
                         print("Closing the connection...")
                         break
-                    
-                    client_socket.sendall(message.encode())
-                    
+
+                    # Jeśli nie ma jeszcze wygenerowanego wspólnego klucza, ostrzeż użytkownika i wyślij jawnie
+                    if not hash_z_shared_key:
+                        # Możesz zdecydować czy wysyłać jawny tekst czy blokować — tu wyślę jawny (niezaszyfrowany) z informacją
+                        print("[UWAGA] Nie ma jeszcze wspólnego klucza. Wiadomość zostanie wysłana jawnie.")
+                        client_socket.sendall((message + "\n").encode())
+                        continue
+
+                    # Szyfruj i wyślij: ENC:<base64(ciphertext)>\n
+                    key = hash_z_shared_key[:16]  # AES-128
+                    cipher = AES.new(key, AES.MODE_CBC, IV)
+                    ciphertext = cipher.encrypt(pad(message.encode('utf-8'), AES.block_size))
+                    payload = "ENC:" + b64encode(ciphertext).decode()
+                    client_socket.sendall((payload + "\n").encode())
+
                 except KeyboardInterrupt:
                     print("\nClosing the connection...")
                     break
                 except Exception as e:
                     print(f"Error sending message: {e}")
                     break
-    
+
     except Exception as e:
         print(f"Unexpected error: {e}")
-    
+
     print("Connection terminated.")
 
 if __name__ == "__main__":
