@@ -21,48 +21,63 @@ def receive_messages(client_socket):
                 break
             
             message = data.decode()
-            
-            # Check if server sent a rejection message
-            if "SERVER_FULL" in message:
-                print(f"\nServer rejected connection: {message.split(':', 1)[1].strip()}")
-                break
-            
-            # Handle DH parameters from server (starts when both clients are connected)
-            elif message.startswith("DH_START:") and not dh_started:
-                parts = message.split(":")
-                g = int(parts[1])
-                p = int(parts[2])
-                print(f"\n=== DIFFIE-HELLMAN KEY EXCHANGE STARTED ===")
-                print(f"Received DH parameters - g: {g}, p: {p}")
-                
-                # Generate private key and compute public key
-                secret = imp.generate_private(p)
-                public_key = imp.compute_public(g, secret, p)
-                
-                # Send public key to server
-                client_socket.sendall(f"PUBLIC_KEY:{public_key}".encode())
-                print(f"Generated private key and sent public key: {public_key}")
-                dh_started = True
-            
-            # Handle peer's public key
-            elif message.startswith("PEER_PUBLIC:"):
-                peer_public = int(message.split(":")[1])
-                print(f"\nReceived peer's public key: {peer_public}")
-                
-                # Compute shared secret
-                if secret and p:
-                    shared_key = imp.compute_shared(secret, peer_public, p)
-                    print(f"Computed shared secret: {shared_key}")
-            
-            # Handle secure channel establishment
-            elif "SECURE_CHANNEL_ESTABLISHED" in message:
-                print(f"\n{message}")
-                print("Enter your secure message (type 'exit' to quit): ", end="")
-            
-            # Handle regular chat messages and system messages
-            else:
-                print(f"\n{message}")
-                if "joined" in message or "left" in message:
+
+            # The server may send multiple newline-delimited messages in one TCP packet.
+            for raw in message.splitlines():
+                if not raw:
+                    continue
+
+                # Check if server sent a rejection message
+                if "SERVER_FULL" in raw:
+                    print(f"\nServer rejected connection: {raw.split(':', 1)[1].strip()}")
+                    return
+
+                # Handle DH parameters from server (starts when both clients are connected)
+                if raw.startswith("DH_START:") and not dh_started:
+                    parts = raw.split(":", 2)
+                    try:
+                        g = int(parts[1])
+                        p = int(parts[2])
+                    except Exception:
+                        print(f"\nMalformed DH_START message: {raw}")
+                        continue
+                    print(f"\n=== DIFFIE-HELLMAN KEY EXCHANGE STARTED ===")
+                    print(f"Received DH parameters - g: {g}, p: {p}")
+
+                    # Generate private key and compute public key
+                    secret = imp.generate_private(p)
+                    public_key = imp.compute_public(g, secret, p)
+
+                    # Send public key to server
+                    client_socket.sendall(f"PUBLIC_KEY:{public_key}\n".encode())
+                    print(f"Generated private key and sent public key: {public_key}")
+                    dh_started = True
+                    continue
+
+                # Handle peer's public key
+                if raw.startswith("PEER_PUBLIC:"):
+                    try:
+                        peer_public = int(raw.split(":", 1)[1])
+                    except Exception:
+                        print(f"\nMalformed PEER_PUBLIC message: {raw}")
+                        continue
+                    print(f"\nReceived peer's public key: {peer_public}")
+
+                    # Compute shared secret
+                    if secret and p:
+                        shared_key = imp.compute_shared(secret, peer_public, p)
+                        print(f"Computed shared secret: {shared_key}")
+                    continue
+
+                # Handle secure channel establishment
+                if "SECURE_CHANNEL_ESTABLISHED" in raw:
+                    print(f"\n{raw}")
+                    print("Enter your secure message (type 'exit' to quit): ", end="")
+                    continue
+
+                # Handle regular chat messages and system messages
+                print(f"\n{raw}")
+                if "joined" in raw or "left" in raw:
                     print("Enter your message (type 'exit' to quit): ", end="")
                 else:
                     print("Enter your message (type 'exit' to quit): ", end="")
