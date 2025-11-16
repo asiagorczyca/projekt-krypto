@@ -153,11 +153,9 @@ def start_client():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             try:
-                # Możesz odkomentować linię poniżej żeby wpisać adres ręcznie:
-                # HOST = input("Input server's IP address: ")
-                HOST_TO_USE = "10.101.11.62"  # tak jak w Twoim oryginale
-                client_socket.connect((HOST_TO_USE, PORT))
-                print(f"Connected to server at {HOST_TO_USE}:{PORT}")
+                HOST = input("Input server's IP address: ")
+                client_socket.connect((HOST, PORT))
+                print(f"Connected to server at {HOST}:{PORT}")
                 print("Waiting for another user to connect...")
                 print("Type 'exit' to quit\n")
 

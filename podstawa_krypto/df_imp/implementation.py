@@ -1,7 +1,7 @@
 import random
+#from podstawa_krypto.df_imp.generowanie_liczb_losowych import randomint,randomint_for_dh
 
-
-def is_probable_prime(n: int, rounds: int = 10) -> bool:
+def is_probable_prime(n: int, rounds: int = 50) -> bool:
     if n < 2:
         return False
     small_primes = (2,3,5,7,11,13,17,19,23,29)

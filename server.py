@@ -1,6 +1,7 @@
 import socket
 import threading
 import podstawa_krypto.df_imp.implementation as imp 
+import podstawa_krypto.df_imp.generowanie_liczb_losowych as gll
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.connect(("8.8.8.8", 80))
