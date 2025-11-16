@@ -6,7 +6,7 @@ import hashlib
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from base64 import b64encode, b64decode
-
+from random import randint,shuffle
 HOST = ''   # zostawiam, ale poniżej nadpisuję w start_client (tak jak w Twoim oryginale)
 PORT = 65432
 
@@ -113,8 +113,10 @@ def receive_messages(client_socket):
                         # Hash the shared secret to derive symmetric key material
                         hash_z_shared_key = hashlib.sha3_256(shared_bytes).digest()
                         print(f"Computed shared secret and derived key (sha3_256).")
+                        IV = hashlib.sha3_256((hash_z_shared_key)).digest()[:16]
                         # For debugging you previously printed raw digest; keep short info only
                         print(f"[INFO] Derived key (SHA3-256) length: {len(hash_z_shared_key)} bytes.")
+                        print(f"[INFO] Derived key (SHA3-256) : {hash_z_shared_key} bytes.")
                     else:
                         print("Brak prywatnego klucza lokalnego lub p; nie można compute_shared.")
                     continue
@@ -129,6 +131,8 @@ def receive_messages(client_socket):
                 # Try to detect and decrypt ENC: payloads
                 decrypted_text, was_decrypted = decrypt_message_if_enc(raw)
                 if was_decrypted:
+                    indeks=decrypted_text.find("!@#$%^&*()!@#$%^&*()")
+                    decrypted_text=decrypted_text[indeks+len("!@#$%^&*()!@#$%^&*()"):]
                     print(f"\n[DECRYPTED] {decrypted_text}")
                 else:
                     print(f"\n{decrypted_text}")
@@ -149,7 +153,7 @@ def receive_messages(client_socket):
             break
 
 def start_client():
-    global hash_z_shared_key
+    global hash_z_shared_key,IV
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             try:
@@ -178,7 +182,7 @@ def start_client():
                     if message.lower() == 'exit':
                         print("Closing the connection...")
                         break
-
+                    message=str(randint(10**100,10**101-1))+"!@#$%^&*()!@#$%^&*()"+message
                     # Jeśli nie ma jeszcze wygenerowanego wspólnego klucza, ostrzeż użytkownika i wyślij jawnie
                     if not hash_z_shared_key:
                         # Możesz zdecydować czy wysyłać jawny tekst czy blokować — tu wyślę jawny (niezaszyfrowany) z informacją
@@ -189,6 +193,7 @@ def start_client():
                     # Szyfruj i wyślij: ENC:<base64(ciphertext)>\n
                     key = hash_z_shared_key[:16]  # AES-128
                     cipher = AES.new(key, AES.MODE_CBC, IV)
+                    IV = hashlib.sha3_256((hash_z_shared_key)).digest()[:16]
                     ciphertext = cipher.encrypt(pad(message.encode('utf-8'), AES.block_size))
                     payload = "ENC:" + b64encode(ciphertext).decode()
                     client_socket.sendall((payload + "\n").encode())
@@ -205,5 +210,4 @@ def start_client():
 
     print("Connection terminated.")
 
-if __name__ == "__main__":
-    start_client()
+start_client()

@@ -56,7 +56,7 @@ def initiate_diffie_hellman():
     try:
         print("Both clients connected! Starting Diffie-Hellman key exchange...")
         # Generate DH parameters outside the lock (this is CPU-heavy and blocks if done while holding the lock)
-        bits = 2088
+        bits = 4096
         print(f"[INFO] Generating p ({bits} bits)...")
         p = imp.generate_prime(bits)
         print(f"Generated p: {p}")
