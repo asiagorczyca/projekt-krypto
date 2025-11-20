@@ -182,21 +182,24 @@ def start_client():
                     if message.lower() == 'exit':
                         print("Closing the connection...")
                         break
-                    message=str(randint(10**100,10**101-1))+"!@#$%^&*()!@#$%^&*()"+message
-                    # Jeśli nie ma jeszcze wygenerowanego wspólnego klucza, ostrzeż użytkownika i wyślij jawnie
-                    if not hash_z_shared_key:
-                        # Możesz zdecydować czy wysyłać jawny tekst czy blokować — tu wyślę jawny (niezaszyfrowany) z informacją
-                        print("[UWAGA] Nie ma jeszcze wspólnego klucza. Wiadomość zostanie wysłana jawnie.")
-                        client_socket.sendall((message + "\n").encode())
-                        continue
+                    elif message != '':
+                        message=str(randint(10**100,10**101-1))+"!@#$%^&*()!@#$%^&*()"+message
+                        # Jeśli nie ma jeszcze wygenerowanego wspólnego klucza, ostrzeż użytkownika i wyślij jawnie
+                        if not hash_z_shared_key:
+                            # Możesz zdecydować czy wysyłać jawny tekst czy blokować — tu wyślę jawny (niezaszyfrowany) z informacją
+                            print("[UWAGA] Nie ma jeszcze wspólnego klucza. Wiadomość zostanie wysłana jawnie.")
+                            client_socket.sendall((message + "\n").encode())
+                            continue
 
-                    # Szyfruj i wyślij: ENC:<base64(ciphertext)>\n
-                    key = hash_z_shared_key[:16]  # AES-128
-                    cipher = AES.new(key, AES.MODE_CBC, IV)
-                    IV = hashlib.sha3_256((hash_z_shared_key)).digest()[:16]
-                    ciphertext = cipher.encrypt(pad(message.encode('utf-8'), AES.block_size))
-                    payload = "ENC:" + b64encode(ciphertext).decode()
-                    client_socket.sendall((payload + "\n").encode())
+                        # Szyfruj i wyślij: ENC:<base64(ciphertext)>\n
+                        key = hash_z_shared_key[:16]  # AES-128
+                        cipher = AES.new(key, AES.MODE_CBC, IV)
+                        IV = hashlib.sha3_256((hash_z_shared_key)).digest()[:16]
+                        ciphertext = cipher.encrypt(pad(message.encode('utf-8'), AES.block_size))
+                        payload = "ENC:" + b64encode(ciphertext).decode()
+                        client_socket.sendall((payload + "\n").encode())
+                    else:
+                        continue
 
                 except KeyboardInterrupt:
                     print("\nClosing the connection...")
