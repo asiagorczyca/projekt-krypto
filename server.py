@@ -30,7 +30,7 @@ def broadcast_message(sender_addr, message, exclude_sender=True):
             try:
                 client_conn.sendall((message + "\n").encode())
                 # debug: confirm successful send
-                print(f"Broadcasted to {client_addr}: {message[:60]}")
+                print(f"Broadcasted to {client_addr}: {message}")
             except (ConnectionResetError, BrokenPipeError):
                 print(f"Client {client_addr} disconnected during broadcast")
                 disconnected_clients.append(client_info)
