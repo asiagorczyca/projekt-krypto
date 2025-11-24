@@ -1,7 +1,8 @@
+import argparse
 import random
 #from podstawa_krypto.df_imp.generowanie_liczb_losowych import randomint,randomint_for_dh
 
-def is_probable_prime(n: int, rounds: int = 50) -> bool:
+def is_probable_prime(n: int, rounds: int = 20) -> bool:
     if n < 2:
         return False
     small_primes = (2,3,5,7,11,13,17,19,23,29)
@@ -34,10 +35,10 @@ def generate_random_odd(bits: int) -> int:
         x += 1
     return x
 
-def generate_prime(bits: int) -> int:
+def generate_prime(bits: int, rounds: int = 20) -> int:
     while True:
         p = generate_random_odd(bits)
-        if is_probable_prime(p):
+        if is_probable_prime(p, rounds=rounds):
             return p
 
 def find_generator(p: int) -> int:
@@ -59,9 +60,9 @@ def compute_public(g: int, priv: int, p: int) -> int:
 def compute_shared(priv: int, peer_pub: int, p: int) -> int:
     return pow(peer_pub, priv, p)
 
-def dh_demo(bits: int):
+def dh_demo(bits: int, rounds: int = 20):
     print(f"[INFO] Generacja p ({bits} bitów)...")
-    p = generate_prime(bits)
+    p = generate_prime(bits, rounds=rounds)
     print(f"Wygenerowano p: {p}")
 
     g = find_generator(p)
@@ -83,5 +84,16 @@ def dh_demo(bits: int):
     print(f"Sekret Bob:   {S_b}")
     print(f"Sekrety się zgadzają? {'Tak' if S_a == S_b else 'Nie'}")
 
+def main():
+    parser = argparse.ArgumentParser(description="Skrócona demonstracja Diffie-Hellmana")
+    parser.add_argument("--bits", type=int, default=512,
+                        help="Długość bitowa liczby pierwszej p (domyślnie 512 dla szybszych testów)")
+    parser.add_argument("--rounds", type=int, default=20,
+                        help="Liczba rund testu Millera-Rabina (domyślnie 20)")
+    args = parser.parse_args()
+
+    dh_demo(bits=args.bits, rounds=args.rounds)
+
+
 if __name__ == "__main__":
-    dh_demo(bits=2088)  
+    main()
