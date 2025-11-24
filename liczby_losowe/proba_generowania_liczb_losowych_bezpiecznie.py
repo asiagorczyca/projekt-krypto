@@ -67,6 +67,73 @@ class HMAC_DRBG_SHA3:
 def sha3_512_bytes(data: bytes) -> bytes:
     return hashlib.sha3_512(data).digest()
 
+def collect_mouse_entropy(samples: int = 16) -> bytes:
+    try:
+        import pyautogui
+        import time
+        m = hashlib.sha3_512()
+        for _ in range(samples):
+            x, y = pyautogui.position()
+            m.update(struct.pack('<II', x, y))
+            m.update(struct.pack('<d', time.time()))
+            time.sleep(0.01)
+        return m.digest()
+    except Exception:
+        return b''
+
+# 2. Entropia ze zrzutu ekranu
+def collect_entropy_from_screenshot(samples: int = 1024) -> bytes:
+    try:
+        from PIL import ImageGrab
+        import random
+        img = ImageGrab.grab()
+        img = img.convert('RGB')
+        w, h = img.size
+        pixels = []
+        rnd = random.Random()
+        for _ in range(samples):
+            px = img.getpixel((rnd.randrange(w), rnd.randrange(h)))
+            pixels.append(px)
+        m = hashlib.sha3_512()
+        for px in pixels:
+            m.update(struct.pack('<BBB', *px))
+        return m.digest()
+    except Exception:
+        return b''
+
+# 3. Entropia z parametrów sprzętowych
+def collect_entropy_from_hardware() -> bytes:
+    m = hashlib.sha3_512()
+    try:
+        import psutil
+        # CPU
+        m.update(struct.pack('<d', time.time()))
+        for perc in psutil.cpu_percent(percpu=True):
+            m.update(struct.pack('<f', perc))
+        m.update(struct.pack('<d', sum(psutil.cpu_times().user for _ in range(1))))
+        # RAM
+        mem = psutil.virtual_memory()
+        m.update(struct.pack('<Q', mem.available))
+        m.update(struct.pack('<Q', mem.used))
+        # Temperatura jeśli dostępna
+        if hasattr(psutil, "sensors_temperatures"):
+            temps = psutil.sensors_temperatures()
+            for k, v in temps.items():
+                for entry in v:
+                    m.update(struct.pack('<f', entry.current))
+        # GPU (jeśli GPUtil dostępne)
+        try:
+            import GPUtil
+            gpus = GPUtil.getGPUs()
+            for gpu in gpus:
+                m.update(struct.pack('<f', gpu.load))
+                m.update(struct.pack('<f', gpu.memoryUtil))
+                m.update(struct.pack('<f', gpu.temperature))
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return m.digest()
 
 def collect_file_entropy(dirpath: str,
                          timeframe_minutes: int = 10,
@@ -189,7 +256,10 @@ def build_seed(dir_for_files: Optional[str],
     pieces.append(collect_time_entropy())
     pieces.append(collect_file_entropy(dir_for_files, timeframe_minutes=timeframe_minutes, samples=10))
     pieces.append(collect_network_entropy())
-
+    pieces.append(collect_mouse_entropy())
+    pieces.append(collect_entropy_from_screenshot())
+    pieces.append(collect_entropy_from_hardware())
+    
     iv_list = prepare_iv_list(ivs, count=50)
     for iv in iv_list:
         pieces.append(iv)
