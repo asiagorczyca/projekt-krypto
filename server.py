@@ -15,29 +15,26 @@ CONNECTIONS = []
 connections_lock = threading.Lock()
 DH_IN_PROGRESS = False
 
-def broadcast_message(sender_addr, message, exclude_sender=True):
-    """Send message to all connected clients except optionally the sender"""
+def broadcast_message(sender_addr, message):
     with connections_lock:
-        disconnected_clients = []
-        for client_info in CONNECTIONS:
-            client_conn = client_info.get('conn')
-            client_addr = client_info.get('addr')
-
-            if exclude_sender and sender_addr is not None and client_addr == sender_addr:
-                continue
-            try:
-                client_conn.sendall((message + "\n").encode())
-                print(f"Broadcasted to {client_addr}: {message}")
-            except (ConnectionResetError, BrokenPipeError):
-                print(f"Client {client_addr} disconnected during broadcast")
-                disconnected_clients.append(client_info)
         
-        for client in disconnected_clients:
-            if client in CONNECTIONS:
-                addr = client.get('addr') if isinstance(client, dict) else client
-                CONNECTIONS.remove(client)
-                print(f"Removed disconnected client {addr}")
-
+        other_client = None
+        for client in CONNECTIONS:
+            if client['addr'] != sender_addr:
+                other_client = client
+                break
+        client_conn = other_client.get('conn')
+        client_addr = other_client.get('addr')
+            
+        try:
+            client_conn.sendall((message + "\n").encode())
+            print(f"Broadcasted to {client_addr}: {message}")
+        except (ConnectionResetError, BrokenPipeError):
+            print(f"Client {client_addr} disconnected during broadcast")
+            CONNECTIONS.remove(client)
+            print(f"Removed disconnected client {client_addr}")
+            
+            
 def initiate_diffie_hellman():
     global DH_IN_PROGRESS
     with connections_lock:
@@ -48,7 +45,7 @@ def initiate_diffie_hellman():
     try:
         print("Both clients connected! Starting Diffie-Hellman key exchange...")
         bits = 4096
-        print(f"[INFO] Generating p ({bits} bits)...")
+        print(f"Generating p ({bits} bits)...")
         p = imp.generate_prime(bits)
         print(f"Generated p: {p}")
         g = imp.find_generator(p)
@@ -72,11 +69,10 @@ def initiate_diffie_hellman():
 def handle_client(conn, addr):
     print(f"Connection established with {addr}.")
     
-    with connections_lock:
-        CONNECTIONS.append({'conn': conn, 'addr': addr, 'pub': None})
-        print(f"Active connections: {len(CONNECTIONS)}")
-        connection_addresses = [info['addr'] for info in CONNECTIONS]
-        print(f"Connected clients: {connection_addresses}")
+    CONNECTIONS.append({'conn': conn, 'addr': addr, 'pub': None})
+    print(f"Active connections: {len(CONNECTIONS)}")
+    connection_addresses = [client_info['addr'] for client_info in CONNECTIONS]
+    print(f"Connected clients: {connection_addresses}")
     
     if len(CONNECTIONS) == 2:
         initiate_diffie_hellman()
@@ -94,27 +90,26 @@ def handle_client(conn, addr):
                 public_key = message.split(":")[1]
                 print(f"Received public key from {addr}: {public_key}")
                 
-                with connections_lock:
-                    for i, client_info in enumerate(CONNECTIONS):
-                            if client_info['addr'] == addr:
-                                CONNECTIONS[i]['pub'] = public_key
-                                break
+                for client_info in CONNECTIONS:
+                    if client_info['addr'] == addr:
+                        client_info['pub'] = public_key 
+                        break
                 
                 notify_secure = False
                 client1_conn = client2_conn = None
                 client1_pub = client2_pub = None
-                with connections_lock:
-                    clients_with_keys = [info for info in CONNECTIONS if info.get('pub') is not None]
-                    if len(clients_with_keys) == 2:
-                        print("Both clients sent public keys, exchanging keys...")
-                        client1_info = clients_with_keys[0]
-                        client2_info = clients_with_keys[1]
 
-                        client1_conn = client1_info['conn']
-                        client1_pub = client1_info['pub']
+                clients_with_keys = [client_info for client_info in CONNECTIONS if client_info.get('pub') is not None]
+                if len(clients_with_keys) == 2:
+                    print("Both clients sent public keys, exchanging keys...")
+                    client1_info = clients_with_keys[0]
+                    client2_info = clients_with_keys[1]
 
-                        client2_conn = client2_info['conn']
-                        client2_pub = client2_info['pub']
+                    client1_conn = client1_info['conn']
+                    client1_pub = client1_info['pub']
+
+                    client2_conn = client2_info['conn']
+                    client2_pub = client2_info['pub']
 
                 if client1_conn and client2_conn:
                     try:
@@ -126,7 +121,7 @@ def handle_client(conn, addr):
                         print(f"Error exchanging public keys: {e}")
 
                 if notify_secure:
-                    broadcast_message(None, "SECURE_CHANNEL_ESTABLISHED: You can now chat securely!", exclude_sender=False)
+                    broadcast_message(None, "SECURE_CHANNEL_ESTABLISHED: You can now chat securely!")
             
             elif not message.startswith(("DH_START:", "PEER_PUBLIC:")):
                 broadcast_message(addr, f"User {addr}: {message}")
@@ -137,13 +132,12 @@ def handle_client(conn, addr):
         print(f"Error with client {addr}: {e}")
     
 
-    with connections_lock:
-        CONNECTIONS[:] = [info for info in CONNECTIONS if info['addr'] != addr]
-        print(f"Active connections: {len(CONNECTIONS)}")
-        remaining_addresses = [info['addr'] for info in CONNECTIONS]
-        print(f"Connected clients: {remaining_addresses}")
+    CONNECTIONS[:] = [info for info in CONNECTIONS if info['addr'] != addr]
+    print(f"Active connections: {len(CONNECTIONS)}")
+    remaining_addresses = [info['addr'] for info in CONNECTIONS]
+    print(f"Connected clients: {remaining_addresses}")
     
-    broadcast_message(addr, f"SYSTEM: User {addr} left the chat", exclude_sender=False)
+    broadcast_message(addr, f"SYSTEM: User {addr} left the chat")
     
     conn.close()
     print(f"Connection with {addr} closed.")
@@ -171,5 +165,4 @@ def start_server():
             thread.start()
 
 if __name__ == "__main__":
-    print(HOST)
     start_server()
