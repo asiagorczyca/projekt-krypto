@@ -1,58 +1,44 @@
-import argparse
 import random
-#from podstawa_krypto.df_imp.generowanie_liczb_losowych import randomint,randomint_for_dh
 
-def is_probable_prime(n: int, rounds: int = 20) -> bool:
-    if n < 2:
-        return False
-    small_primes = (2,3,5,7,11,13,17,19,23,29)
-    for p in small_primes:
-        if n % p == 0:
-            return n == p
+# 4096-bit MODP Group RFC 3526 
 
-    d = n - 1
-    s = 0
-    while d % 2 == 0:
-        d //= 2
-        s += 1
+RFC_3526_PRIME_4096_HEX = (
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
+    "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
+    "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
+    "E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"
+    "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D"
+    "C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F"
+    "83655D23DCA3AD961C62F356208552BB9ED529077096966D"
+    "670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B"
+    "E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9"
+    "DE2BCBF6955817183995497CEA956AE515D2261898FA0510"
+    "15728E5A8AACAA68FFFFFFFFFFFFFFFFC90FDAA22168C234"
+    "C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22"
+    "514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F1437"
+    "4FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B"
+    "0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE6"
+    "49286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A"
+    "69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB"
+    "9ED529077096966D670C354E4ABC9804F1746C08CA18217C"
+    "32905E462E36CE3BE39E772C180E86039B2783A2EC07A28F"
+    "B5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE5"
+    "15D2261898FA051015728E5A8AAAC42DAD33170D04507A33"
+    "A85521ABDF1CBA64ECFB850458DBEF0A8AEA71575D060C7D"
+    "B3970F85A6E1E4C7ABF5AE8CDB0933D71E8C94E04A25619D"
+    "CEE3D2261AD2EE6BF12FFA06D98A0864D87602733EC86A64"
+    "521F2B18177B200CBBE117577A615D6C770988C0BAD946E2"
+    "08E24FA074E5AB3143DB5BFCE0FD108E4B82D120A93AD2CA"
+    "FFFFFFFFFFFFFFFF"
+)
 
-    for _ in range(rounds):
-        a = random.randint(2, n - 2)
-        x = pow(a, d, n)
-        if x == 1 or x == n - 1:
-            continue
-        for _ in range(s - 1):
-            x = pow(x, 2, n)
-            if x == n - 1:
-                break
-        else:
-            return False
-    return True
-
-def generate_random_odd(bits: int) -> int:
-    x = random.randint(2**(bits-1), 2**bits - 1)
-    if x % 2 == 0:
-        x += 1
-    return x
-
-def generate_prime(bits: int, rounds: int = 20) -> int:
-    while True:
-        p = generate_random_odd(bits)
-        if is_probable_prime(p, rounds=rounds):
-            return p
-
-def find_generator(p: int) -> int:
-    for _ in range(1000):
-        g = random.randint(2, p - 2)
-        if pow(g, (p-1)//2, p) != 1:  
-            return g
-    return 2  
-
+def get_standard_parameters():
+    p = int(RFC_3526_PRIME_4096_HEX, 16)
+    g = 2
+    return p, g
 
 def generate_private(p: int) -> int:
     return random.randint(2, p - 2)
-
-# change into one funkction 
 
 def compute_public(g: int, priv: int, p: int) -> int:
     return pow(g, priv, p)
