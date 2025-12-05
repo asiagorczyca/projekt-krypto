@@ -15,7 +15,7 @@ IV = b'0123456789abcdef'
 
 def decrypt_message_if_enc(raw_text: str):
     """Jeżeli raw_text zawiera tag 'ENC:' spróbuj odszyfrować treść; zwróć krotkę (ok, text_or_error, decrypted_bool)."""
-    global hash_z_shared_key
+    global hash_z_shared_key, IV
     if "ENC:" not in raw_text:
         return raw_text, False
 
