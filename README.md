@@ -1,6 +1,7 @@
 # Cryptography project 
 This project is a complete code to enable communication between two users with the help of a server. Both server and client need the implementation.py file to ensure they work correctly. The aim of this project is to implement a safe way for encrypted end-to-end communication  using Diffie-Hellman key exchange based on large prime numbers and to ensure that these primes are considered safe.
 
+# General information
 ## Features
 - Key exchange - using Diffie-Hellman with GNU Multiple Precision Arithmetic Library for efficiency, sieving to discard bad primes and Miller-Rabin test (probabilistic proof of primality),
 - Message encryption - AES-256 in cipher block chaining mode with PKCS#7 padding and an IV that changes for every message, the secret from Diffie-Hellman is hashed using SHA-256 to create a key,
@@ -26,4 +27,6 @@ python server.py
 
 # to run the client (server waits for two users) 
 python client.py
+```
 
+# Documentation 
