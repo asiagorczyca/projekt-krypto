@@ -11,12 +11,10 @@ except ImportError:
     print("Error: gmpy2 is missing. Please run: pip install gmpy2")
     sys.exit(1)
 
-# Increase limit for integer to string conversion just in case
 sys.set_int_max_str_digits(10000)
 
-# --- CONFIGURATION ---
-SEARCH_BATCH_SIZE = 50000  # Check 50k candidates per random seed
-MR_ROUNDS = 40             # 40 rounds is standard for security (probability < 2^-80)
+SEARCH_BATCH_SIZE = 50000  
+MR_ROUNDS = 40             
 
 RFC_3526_PRIME_4096_HEX = (
     "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
