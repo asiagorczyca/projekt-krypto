@@ -8,6 +8,7 @@ from Crypto.Random import get_random_bytes
 from base64 import b64encode, b64decode
 from random import randint
 import os
+import hmac 
 
 HOST = ''
 PORT = 65432
@@ -19,11 +20,30 @@ def decrypt_message_if_enc(raw_text: str):
     global hash_z_shared_key
     if "ENC:" not in raw_text:
         return raw_text, False
-
+    
     try:
-        idx = raw_text.rfind("ENC:")
-        b64part = raw_text[idx + len("ENC:"):].strip()
-        encrypted_data = b64decode(b64part)
+        content = raw_text.split("ENC:", 1)[1].strip()
+        
+        # Now split SIGNATURE and PAYLOAD
+        if ":" not in content:
+            return "[Error: Malformed message format]", False
+            
+        received_signature, b64_part = content.split(":", 1)
+
+        if not hash_z_shared_key:
+            return "[Error: No shared key established yet]", False
+
+
+        computed_signature = hmac.new(
+            hash_z_shared_key, 
+            b64_part.encode('utf-8'), 
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(computed_signature, received_signature):
+            return "[Error: HMAC Signature Invalid! Message tampered]", False
+        
+        encrypted_data = b64decode(b64_part)
         
         if len(encrypted_data) < 16:
             return "[Error: Data too short]", False
@@ -31,16 +51,14 @@ def decrypt_message_if_enc(raw_text: str):
         iv = encrypted_data[:16]
         ciphertext = encrypted_data[16:]
 
-        if not hash_z_shared_key:
-            return "[Error: No shared key established yet]", False
-
         key = hash_z_shared_key
         cipher = AES.new(key, AES.MODE_CBC, iv)
         pt_padded = cipher.decrypt(ciphertext)
         pt = unpad(pt_padded, AES.block_size).decode('utf-8')
         return pt, True
-    except Exception:
-        return f"[Decryption Failed]", False
+
+    except Exception as e:
+        return f"[Decryption Failed: {e}]", False
 
 def receive_messages(client_socket):
     global hash_z_shared_key, peer_name
@@ -120,7 +138,7 @@ def receive_messages(client_socket):
 def start_client():
     global hash_z_shared_key
     
-    host_ip = input("Enter Server IP (default 127.0.0.1): ").strip() or "127.0.0.1"
+    host_ip = input("Enter Server IP: ").strip()
     my_username = input("Choose a username: ").strip() or "Anonymous"
     
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -155,8 +173,17 @@ def start_client():
                 full_msg = salt + msg
                 
                 ciphertext = cipher.encrypt(pad(full_msg.encode('utf-8'), AES.block_size))
-                payload = b64encode(iv + ciphertext).decode('utf-8')
-                client_socket.sendall(f"ENC:{payload}\n".encode())
+                
+                payload_str = b64encode(iv + ciphertext).decode('utf-8')
+
+                signature = hmac.new(
+                    hash_z_shared_key, 
+                    payload_str.encode('utf-8'), 
+                    hashlib.sha256
+                ).hexdigest()
+                
+                final_packet = f"ENC:{signature}:{payload_str}\n"
+                client_socket.sendall(final_packet.encode())
             else:
                 print("[System] Waiting for secure connection...")
 
