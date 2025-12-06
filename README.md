@@ -30,3 +30,15 @@ python client.py
 ```
 
 # Documentation 
+
+## implementation.py 
+_This file contains an implementation of all of the functions used for DH key exchange and parallelised safe prime generation_
+**Functions**
+
+## server.py
+_This is the main server file used for connecting two users, generating the p and g, performing the key exchange as well as the exchange of encrypted messages_
+**Functions**
+
+## client.py 
+_This is the client file used for establishing connection with the server, computing the public and private keys, receiving messages and sending them (using encryption and HMAC)_
+**Functions**
