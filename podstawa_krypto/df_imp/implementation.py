@@ -1,7 +1,8 @@
-import time
 import multiprocessing
 import random
 import sys
+import time
+import os
 
 try:
     import gmpy2
@@ -10,7 +11,12 @@ except ImportError:
     print("Error: gmpy2 is missing. Please run: pip install gmpy2")
     sys.exit(1)
 
+# Increase limit for integer to string conversion just in case
 sys.set_int_max_str_digits(10000)
+
+# --- CONFIGURATION ---
+SEARCH_BATCH_SIZE = 50000  # Check 50k candidates per random seed
+MR_ROUNDS = 40             # 40 rounds is standard for security (probability < 2^-80)
 
 RFC_3526_PRIME_4096_HEX = (
     "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
@@ -42,9 +48,6 @@ RFC_3526_PRIME_4096_HEX = (
     "FFFFFFFFFFFFFFFF"
 )
 
-def get_standard_parameters():
-    return int(RFC_3526_PRIME_4096_HEX, 16), 2
-
 def get_primorial(n):
     res = mpz(1)
     p = 2
@@ -53,13 +56,16 @@ def get_primorial(n):
         p = gmpy2.next_prime(p)
     return res
 
+
 PRIMORIAL_2000 = get_primorial(2000)
+
+def get_standard_parameters():
+    return int(RFC_3526_PRIME_4096_HEX, 16), 2
 
 def find_generator(p: int) -> int:
     p_mpz = mpz(p)
     q_mpz = (p_mpz - 1) // 2
     
-
     rs = gmpy2.random_state(random.SystemRandom().getrandbits(64))
     
     while True:
@@ -70,56 +76,55 @@ def find_generator(p: int) -> int:
             
         return int(g)
 
-
 def safe_prime_worker(bits, stop_event, result_queue):
-
-    seed = random.SystemRandom().getrandbits(64)
-    rs = gmpy2.random_state(seed)
+    min_q = mpz(2)**(bits - 2)
     
-    q_bits = bits - 1
     local_primorial = PRIMORIAL_2000
     
-    candidate = gmpy2.mpz_urandomb(rs, q_bits)
-    candidate = gmpy2.bit_set(candidate, q_bits - 1)
-    candidate = gmpy2.bit_set(candidate, 0)
-    
     while not stop_event.is_set():
-        q = gmpy2.next_prime(candidate)
+        seed_bytes = os.urandom(bits // 8)
+        q_candidate = mpz(int.from_bytes(seed_bytes, 'big')) | min_q
         
-        if q.bit_length() != q_bits:
-            candidate = gmpy2.mpz_urandomb(rs, q_bits)
-            candidate = gmpy2.bit_set(candidate, q_bits - 1)
-            candidate = gmpy2.bit_set(candidate, 0)
-            continue
-
-        p = (q * 2) + 1
-        
-        if gmpy2.gcd(p, local_primorial) != 1:
-            candidate = q + 2
-            continue
-
-        if gmpy2.is_prime(p, 25):
-            g = int(2) 
-            if gmpy2.powmod(2, 2, p) == 1 or gmpy2.powmod(2, q, p) == 1:
-                pass
+        if q_candidate % 2 == 0:
+            q_candidate += 1
             
-            result_queue.put((int(p), int(p)))
-            stop_event.set()
-            return
-        
+        curr = q_candidate
 
-        candidate = q + 2
+        for _ in range(SEARCH_BATCH_SIZE):
+            if stop_event.is_set():
+                return
+
+            if gmpy2.gcd(curr, local_primorial) != 1:
+                curr += 2
+                continue
+                
+
+            p = 2 * curr + 1
+            if gmpy2.gcd(p, local_primorial) != 1:
+                curr += 2
+                continue
+
+
+            if gmpy2.is_prime(p, 1):
+
+                if gmpy2.is_prime(curr, 1):
+                    if gmpy2.is_prime(p, MR_ROUNDS) and gmpy2.is_prime(curr, MR_ROUNDS):
+                        stop_event.set()
+                        result_queue.put((int(p), int(curr)))
+                        return
+            
+            curr += 2
 
 def get_parameters_parallel(bits, timeout=10):
-
     num_workers = multiprocessing.cpu_count()
-    print(f"Starting {num_workers} parallel workers for {bits}-bit Safe Prime...")
+    if num_workers > 6: num_workers = 6
+        
+    print(f"Generating {bits}-bit Safe Prime using {num_workers} workers...")
     
     result_queue = multiprocessing.Queue()
     stop_event = multiprocessing.Event()
     processes = []
     
-    start_time = time.time()
     
     for _ in range(num_workers):
         p = multiprocessing.Process(
@@ -136,12 +141,11 @@ def get_parameters_parallel(bits, timeout=10):
     try:
         p_found, _ = result_queue.get(timeout=timeout)
         
-        print(f"Safe Prime generated in {time.time() - start_time:.2f}s")
         p_val = p_found
         g_val = find_generator(p_val)
         
     except multiprocessing.queues.Empty:
-        print(f"Timeout ({timeout}s) reached. Switching to Standard Parameters.")
+        print(f"Timeout reached. Switching to RFC 3526 Standard Parameters.")
         p_val, g_val = get_standard_parameters()
     finally:
         stop_event.set()
