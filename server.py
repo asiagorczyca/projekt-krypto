@@ -49,7 +49,7 @@ def background_params_generator(queue):
    
     bits = 2048
     try:
-        p, g = imp.get_parameters_parallel(bits, timeout=20)
+        p, g = imp.get_parameters_parallel(bits, timeout=10)
         queue.put((p, g))
     except Exception as e:
         print(f"[Generator Error] {e}")

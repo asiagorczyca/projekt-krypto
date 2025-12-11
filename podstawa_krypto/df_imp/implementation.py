@@ -1,7 +1,6 @@
 import multiprocessing
 import random
 import sys
-import time
 import os
 from liczby_losowe.our_own_csrng import KeccakBasedCSPRNG
 try:
