@@ -20,6 +20,11 @@ CONNECTIONS = []
 connections_lock = threading.RLock() 
 DH_IN_PROGRESS = False
 
+
+SERVER_P = None
+SERVER_G = None
+params_queue = None 
+
 def broadcast_message(sender_addr, message):
     with connections_lock:
         target = None
@@ -35,8 +40,24 @@ def broadcast_message(sender_addr, message):
                 if target in CONNECTIONS:
                     CONNECTIONS.remove(target)
 
+
+def background_params_generator(queue):
+    """
+    Ta funkcja działa w tle. Uruchamia obliczenia z implementation.py
+    i wrzuca wynik do kolejki.
+    """
+   
+    bits = 2048
+    try:
+        p, g = imp.get_parameters_parallel(bits, timeout=20)
+        queue.put((p, g))
+    except Exception as e:
+        print(f"[Generator Error] {e}")
+
 def initiate_diffie_hellman():
     global DH_IN_PROGRESS
+    global SERVER_G, SERVER_P
+    
     with connections_lock:
         if len(CONNECTIONS) != 2 or DH_IN_PROGRESS:
             return False
@@ -50,10 +71,16 @@ def initiate_diffie_hellman():
             c2['conn'].sendall(f"PEER_USERNAME:{c1['name']}\n".encode())
             c1['conn'].sendall(f"PEER_USERNAME:{c2['name']}\n".encode())
 
-        bits = 2048 
-        p, g = imp.get_parameters_parallel(bits, timeout=10)
-        print(f"[DH] Generated parameters p: {p} and g: {g}")
         
+        if SERVER_P is None or SERVER_G is None:
+            print("[DH] Parameters not ready yet. Waiting for background generator...")
+            
+            SERVER_P, SERVER_G = params_queue.get()
+        
+        p = SERVER_P
+        g = SERVER_G
+        
+        print(f"[DH] Using parameters p: {p} and g: {g}")
         
         with connections_lock:
             for client in CONNECTIONS:
@@ -145,6 +172,7 @@ def start_server():
         
     server.listen()
     print(f"Server running on {HOST}:{PORT}")
+    print("[System] Background parameter generation started...")
     
     while True:
         conn, addr = server.accept()
@@ -155,6 +183,29 @@ def start_server():
                 continue
         threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
 
+
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    start_server()
+    
+    
+    params_queue = multiprocessing.Queue()
+    
+    
+    gen_process = multiprocessing.Process(
+        target=background_params_generator, 
+        args=(params_queue,), 
+        daemon=False
+    )
+    gen_process.start()
+    
+    try:
+        
+        start_server()
+    except KeyboardInterrupt:
+        print("\nStopping server...")
+    finally:
+        
+        if gen_process.is_alive():
+            print("Terminating generator process...")
+            gen_process.terminate()
+            gen_process.join()

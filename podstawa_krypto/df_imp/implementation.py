@@ -3,7 +3,7 @@ import random
 import sys
 import time
 import os
-
+from liczby_losowe.our_own_csrng import KeccakBasedCSPRNG
 try:
     import gmpy2
     from gmpy2 import mpz
@@ -154,7 +154,12 @@ def get_parameters_parallel(bits, timeout=10):
     return p_val, g_val
 
 def generate_private(p: int) -> int:
-    return random.SystemRandom().randint(2, p - 2)
+    rng = KeccakBasedCSPRNG(
+        dir_for_files=None,  
+        reseed_interval_calls=3000
+    )
+    return rng.get_random_range(a=2,b=p-2)
+    #return random.SystemRandom().randint(2, p - 2)
 
 def compute_public(g: int, priv: int, p: int) -> int:
     return int(gmpy2.powmod(gmpy2.mpz(g), gmpy2.mpz(priv), gmpy2.mpz(p)))

@@ -1,6 +1,6 @@
 
 """
-keccak_rng_no_secrets.py
+
 
 Keccak-based CSPRNG bez użycia biblioteki `secrets`.
 Źródła entropii:
@@ -9,10 +9,6 @@ Keccak-based CSPRNG bez użycia biblioteki `secrets`.
  - czas / PID / os.urandom rezerwa,
  - opcjonalnie ruch sieciowy (psutil),
 Rdzeń: HMAC-DRBG z HMAC-SHA3-256.
-
-CLI:
-  python keccak_rng_no_secrets.py --bytes 32 --dir /path/to/files
-  python keccak_rng_no_secrets.py --bits 256 --dir /path/to/files
 """
 
 import os
@@ -316,6 +312,19 @@ class KeccakBasedCSPRNG:
 
     def get_random_hex(self, nbytes: int) -> str:
         return self.get_random_bytes(nbytes).hex()
+    
+
+    def get_random_range(self, a: int, b: int) -> int:
+        if a > b:
+            raise ValueError("Początek przedziału (a) musi być mniejszy lub równy końcowi (b).")
+        if a == b:
+            return a
+        range_size = b - a + 1
+        nbits = range_size.bit_length()
+        while True:
+            candidate = self.get_random_int(nbits)
+            if candidate < range_size:
+                return a + candidate
 
 
 # ---------------------------
