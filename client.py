@@ -24,14 +24,13 @@ def decrypt_message_if_enc(raw_text: str):
     try:
         content = raw_text.split("ENC:", 1)[1].strip()
         
-        # Now split SIGNATURE and PAYLOAD
         if ":" not in content:
-            return "[Error: Malformed message format]", False
+            return "[Error} Malformed message format", False
             
         received_signature, b64_part = content.split(":", 1)
 
         if not hash_z_shared_key:
-            return "[Error: No shared key established yet]", False
+            return "[Error} No shared key established yet", False
 
 
         computed_signature = hmac.new(
@@ -41,12 +40,12 @@ def decrypt_message_if_enc(raw_text: str):
         ).hexdigest()
 
         if not hmac.compare_digest(computed_signature, received_signature):
-            return "[Error: HMAC Signature Invalid! Message tampered]", False
+            return "[Error] HMAC Signature Invalid! Message tampered", False
         
         encrypted_data = b64decode(b64_part)
         
         if len(encrypted_data) < 16:
-            return "[Error: Data too short]", False
+            return "[Error] Data too short", False
             
         iv = encrypted_data[:16]
         ciphertext = encrypted_data[16:]
@@ -58,7 +57,7 @@ def decrypt_message_if_enc(raw_text: str):
         return pt, True
 
     except Exception as e:
-        return f"[Decryption Failed: {e}]", False
+        return f"[Error] Decryption Failed: {e}", False
 
 def receive_messages(client_socket):
     global hash_z_shared_key, peer_name
@@ -70,26 +69,24 @@ def receive_messages(client_socket):
     while True:
         try:
             data = client_socket.recv(4096)
-            if not data:
-                print("\nServer closed the connection")
-                os._exit(0)
+            if not data: break
             
             buffer += data.decode(errors='ignore')
             
             while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                line = line.strip()
-                if not line: continue
+                message, buffer = buffer.split("\n", 1)
+                message = message.strip()
+                if not message: continue
 
-                if line.startswith("PEER_USERNAME:"):
-                    new_peer = line.split(":", 1)[1]
+                if message.startswith("PEER_USERNAME:"):
+                    new_peer = message.split(":", 1)[1]
                     peer_name = new_peer
                     print(f"\n[System] You are chatting with {peer_name}")
                     print("You: ", end="", flush=True)
                     continue
 
-                if line.startswith("DH_START:"):
-                    parts = line.split(":")
+                if message.startswith("DH_START:"):
+                    parts = message.split(":")
                     g = int(parts[1])
                     p = int(parts[2])
                     
@@ -100,8 +97,8 @@ def receive_messages(client_socket):
                     client_socket.sendall(f"PUBLIC_KEY:{public_key}\n".encode())
                     continue
 
-                if line.startswith("PEER_PUBLIC:"):
-                    peer_public = int(line.split(":")[1])
+                if message.startswith("PEER_PUBLIC:"):
+                    peer_public = int(message.split(":")[1])
                     if dh_secret and p:
                         shared_int = imp.compute_shared(dh_secret, peer_public, p)
                         shared_bytes = shared_int.to_bytes((shared_int.bit_length() + 7) // 8, 'big')
@@ -109,13 +106,8 @@ def receive_messages(client_socket):
                         print(f"[System] Secure Connection Established.")
                     continue
 
-                if "SECURE_CHANNEL_ESTABLISHED" in line:
-                    print(f"\n=== Secure Channel Ready ===")
-                    print(f"Say hello to {peer_name}!")
-                    print("You: ", end="", flush=True)
-                    continue
 
-                decrypted_text, was_decrypted = decrypt_message_if_enc(line)
+                decrypted_text, was_decrypted = decrypt_message_if_enc(message)
                 
                 if was_decrypted and "!@#$%^&*()" in decrypted_text:
                     parts = decrypted_text.split("!@#$%^&*()!@#$%^&*()")
@@ -124,7 +116,7 @@ def receive_messages(client_socket):
 
                 if was_decrypted:
                     print(f"\r[{peer_name}]: {decrypted_text}")
-                elif not line.startswith("User"):
+                elif not message.startswith("User"):
                     pass
 
                 print("You: ", end="", flush=True)
@@ -132,30 +124,27 @@ def receive_messages(client_socket):
         except Exception as e:
             print(f"\nError: {e}")
             break
-    
     os._exit(0)
 
 def start_client():
     global hash_z_shared_key
     
     host_ip = input("Enter Server IP: ").strip()
-    my_username = input("Choose a username: ").strip() or "Anonymous"
+    my_username = input("Choose a username: ").strip()
     
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         client_socket.connect((host_ip, PORT))
     except Exception as e:
-        print(f"Could not connect: {e}")
+        print(f"[System] Could not connect: {e}")
         return
 
     client_socket.sendall(f"USERNAME:{my_username}\n".encode())
 
-    print(f"Connected to {host_ip}:{PORT} as {my_username}")
-    print("Waiting for partner...")
+    print(f"[System] Connected to {host_ip}:{PORT} as {my_username}")
+    print("[System] Waiting for partner...")
     
-    t = threading.Thread(target=receive_messages, args=(client_socket,))
-    t.daemon = True
-    t.start()
+    threading.Thread(target=receive_messages, args=(client_socket,), daemon=True).start()
 
     while True:
         try:
