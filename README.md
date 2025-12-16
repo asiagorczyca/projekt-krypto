@@ -28,17 +28,3 @@ python server.py
 # to run the client (server waits for two users) 
 python client.py
 ```
-
-# Documentation 
-
-## implementation.py 
-
-
-## server.py 
-
-
-
-## client.py 
-_This is the client file used for establishing connection with the server, computing the public and private keys, receiving messages and sending them (using encryption and HMAC)_
-
-**Functions**
