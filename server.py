@@ -1,6 +1,5 @@
 import socket
 import threading
-import time
 import multiprocessing
 import podstawa_krypto.df_imp.implementation as imp 
 
@@ -27,26 +26,15 @@ params_queue = None
 
 def broadcast_message(sender_addr, message):
     with connections_lock:
-        target = None
         for client in CONNECTIONS:
             if client['addr'] != sender_addr:
-                target = client
-                break
-        
-        if target:
-            try:
-                target['conn'].sendall((message + "\n").encode())
-            except Exception:
-                if target in CONNECTIONS:
-                    CONNECTIONS.remove(target)
-
+                try:
+                    client['conn'].sendall((message + "\n").encode())
+                except Exception as e:
+                    print(f"[System] Error sending a message {e}")
+                    pass
 
 def background_params_generator(queue):
-    """
-    Ta funkcja działa w tle. Uruchamia obliczenia z implementation.py
-    i wrzuca wynik do kolejki.
-    """
-   
     bits = 2048
     try:
         p, g = imp.get_parameters_parallel(bits, timeout=10)
@@ -64,7 +52,7 @@ def initiate_diffie_hellman():
         DH_IN_PROGRESS = True
 
     try:
-        print("\nStarting Key Exchange...")
+        print("\n[System] Starting Key Exchange...")
         with connections_lock:
             c1 = CONNECTIONS[0]
             c2 = CONNECTIONS[1]
@@ -73,29 +61,29 @@ def initiate_diffie_hellman():
 
         
         if SERVER_P is None or SERVER_G is None:
-            print("[DH] Parameters not ready yet. Waiting for background generator...")
+            print("[System] Parameters not ready yet. Waiting for background generator...")
             
             SERVER_P, SERVER_G = params_queue.get()
         
         p = SERVER_P
         g = SERVER_G
         
-        print(f"[DH] Using parameters p: {p} and g: {g}")
+        print(f"[System] Using parameters p: {p} and g: {g}")
         
         with connections_lock:
             for client in CONNECTIONS:
                 try:
                     client['conn'].sendall(f"DH_START:{g}:{p}\n".encode())
                 except Exception as e:
-                    print(f"Error sending params: {e}")
+                    print(f"[System] Error sending params: {e}")
     except Exception as e:
-        print(f"DH Initialization Error: {e}")
+        print(f"[System] DH Initialization Error: {e}")
     finally:
         with connections_lock:
             DH_IN_PROGRESS = False
 
 def handle_client(conn, addr):
-    print(f"Connection from {addr}")
+    print(f"[System] Connection from {addr}")
     
     with connections_lock:
         CONNECTIONS.append({'conn': conn, 'addr': addr, 'pub': None, 'name': f"User({addr[1]})"})
@@ -138,21 +126,19 @@ def handle_client(conn, addr):
                         
                         ready = [c for c in CONNECTIONS if c['pub']]
                         if len(ready) == 2:
-                            print("Exchanging Public Keys...")
+                            print("[System] Exchanging Public Keys...")
                             c1, c2 = ready[0], ready[1]
                             try:
                                 c1['conn'].sendall(f"PEER_PUBLIC:{c2['pub']}\n".encode())
                                 c2['conn'].sendall(f"PEER_PUBLIC:{c1['pub']}\n".encode())
-                                time.sleep(0.1)
-                                broadcast_message(None, "SECURE_CHANNEL_ESTABLISHED")
                             except Exception as e:
-                                print(f"Error exchanging keys: {e}")
+                                print(f"[System] Error exchanging keys: {e}")
 
                 elif not message.startswith(("DH_START:", "PEER_PUBLIC:")):
                     broadcast_message(addr, message)
 
     except Exception as e:
-        print(f"Error {addr}: {e}")
+        print(f"[System] Error {addr}: {e}")
     finally:
         with connections_lock:
             CONNECTIONS[:] = [c for c in CONNECTIONS if c['addr'] != addr]
@@ -171,7 +157,7 @@ def start_server():
         server.bind(('0.0.0.0', PORT))
         
     server.listen()
-    print(f"Server running on {HOST}:{PORT}")
+    print(f"[System] Server running on {HOST}:{PORT}")
     print("[System] Background parameter generation started...")
     
     while True:
@@ -187,9 +173,7 @@ def start_server():
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     
-    
     params_queue = multiprocessing.Queue()
-    
     
     gen_process = multiprocessing.Process(
         target=background_params_generator, 
@@ -199,12 +183,12 @@ if __name__ == "__main__":
     gen_process.start()
     
     try:
-        
         start_server()
+        
     except KeyboardInterrupt:
         print("\nStopping server...")
-    finally:
         
+    finally:
         if gen_process.is_alive():
             print("Terminating generator process...")
             gen_process.terminate()
