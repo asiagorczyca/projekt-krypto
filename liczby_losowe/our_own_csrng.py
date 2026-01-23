@@ -1,7 +1,5 @@
 
 """
-
-
 Keccak-based CSPRNG bez użycia biblioteki `secrets`.
 Źródła entropii:
  - hashowanie (SHA3/Keccak) plików zmienionych w ostatnim X minutach,
@@ -10,7 +8,8 @@ Keccak-based CSPRNG bez użycia biblioteki `secrets`.
  - opcjonalnie ruch sieciowy (psutil),
 Rdzeń: HMAC-DRBG z HMAC-SHA3-256.
 """
-
+import subprocess
+import threading
 import os
 import time
 import hashlib
@@ -28,13 +27,7 @@ except Exception:
     _have_psutil = False
 
 
-# ---------------------------
-# HMAC-DRBG (SHA3-256)
-# ---------------------------
 class HMAC_DRBG_SHA3:
-    """
-    Prosta implementacja HMAC-DRBG używająca SHA3-256 jako funkcji HMAC.
-    """
 
     def __init__(self, seed: bytes):
         self.K = b'\x00' * 32
@@ -77,7 +70,7 @@ def collect_mouse_entropy(samples: int = 16) -> bytes:
     except Exception:
         return b''
 
-# 2. Entropia ze zrzutu ekranu
+
 def collect_entropy_from_screenshot(samples: int = 1024) -> bytes:
     try:
         from PIL import ImageGrab
@@ -97,27 +90,23 @@ def collect_entropy_from_screenshot(samples: int = 1024) -> bytes:
     except Exception:
         return b''
 
-# 3. Entropia z parametrów sprzętowych
+
 def collect_entropy_from_hardware() -> bytes:
     m = hashlib.sha3_512()
     try:
         import psutil
-        # CPU
         m.update(struct.pack('<d', time.time()))
         for perc in psutil.cpu_percent(percpu=True):
             m.update(struct.pack('<f', perc))
         m.update(struct.pack('<d', sum(psutil.cpu_times().user for _ in range(1))))
-        # RAM
         mem = psutil.virtual_memory()
         m.update(struct.pack('<Q', mem.available))
         m.update(struct.pack('<Q', mem.used))
-        # Temperatura jeśli dostępna
         if hasattr(psutil, "sensors_temperatures"):
             temps = psutil.sensors_temperatures()
             for k, v in temps.items():
                 for entry in v:
                     m.update(struct.pack('<f', entry.current))
-        # GPU (jeśli GPUtil dostępne)
         try:
             import GPUtil
             gpus = GPUtil.getGPUs()
@@ -135,11 +124,6 @@ def collect_file_entropy(dirpath: str,
                          timeframe_minutes: int = 10,
                          samples: int = 8,
                          max_read_bytes: int = 16384) -> bytes:
-    """
-    Wybiera pliki z katalogu zmienione w ostatnim `timeframe_minutes`.
-    Losowo wybiera `samples` plików (jeśli dostępne) i hashuje ich fragmenty.
-    Zwraca SHA3-512 z concatenacji.
-    """
     if not dirpath or not os.path.isdir(dirpath):
         return b''
 
@@ -156,7 +140,6 @@ def collect_file_entropy(dirpath: str,
                 continue
 
     if not filepaths:
-        # jeśli brak plików w timeframe, weź kilka ostatnio zmienionych
         for root, dirs, files in os.walk(dirpath):
             for f in files:
                 filepaths.append(os.path.join(root, f))
@@ -188,9 +171,6 @@ def collect_file_entropy(dirpath: str,
 
 
 def collect_network_entropy() -> bytes:
-    """
-    Zbiera proste statystyki sieciowe (jeśli psutil dostępne).
-    """
     if not _have_psutil:
         return b''
     try:
@@ -215,16 +195,10 @@ def collect_time_entropy() -> bytes:
     m = hashlib.sha3_512()
     m.update(struct.pack('<d', time.time()))
     m.update(struct.pack('<I', os.getpid()))
-    # dołącz losowe 16B z systemu jako rezerwa
     m.update(os.urandom(16))
     return m.digest()
 
-
 def prepare_iv_list(iv_iter: Optional[Iterable[bytes]], count: int = 50) -> List[bytes]:
-    """
-    Przygotuj listę `count` IV. Jeśli iv_iter podane -> użyj (trunc/triple) do 32B,
-    inaczej wygeneruj z os.urandom.
-    """
     out = []
     if iv_iter:
         for iv in iv_iter:
@@ -238,16 +212,11 @@ def prepare_iv_list(iv_iter: Optional[Iterable[bytes]], count: int = 50) -> List
     return out[:count]
 
 
-# ---------------------------
-# Budowanie seeda / miksowanie
-# ---------------------------
 def build_seed(dir_for_files: Optional[str],
                ivs: Optional[Iterable[bytes]],
                timeframe_minutes: int = 10) -> bytes:
-    """
-    Zbierz wszystkie źródła entropii, pomieszaj przez SHA3-512 i zwróć 32-bajtowy seed.
-    """
     pieces = []
+    
     pieces.append(hashlib.sha3_512(os.urandom(64)).digest())
     pieces.append(collect_time_entropy())
     pieces.append(collect_file_entropy(dir_for_files, timeframe_minutes=timeframe_minutes, samples=10))
@@ -256,6 +225,7 @@ def build_seed(dir_for_files: Optional[str],
     pieces.append(collect_entropy_from_screenshot())
     pieces.append(collect_entropy_from_hardware())
     
+
     iv_list = prepare_iv_list(ivs, count=50)
     for iv in iv_list:
         pieces.append(iv)
@@ -265,14 +235,15 @@ def build_seed(dir_for_files: Optional[str],
         if not p:
             continue
         h.update(p)
+        
+    h.update(struct.pack('<Q', time.perf_counter_ns()))
+    
     big = h.digest()
     seed32 = hashlib.sha3_256(big).digest()
     return seed32
 
 
-# ---------------------------
-# Publiczny CSPRNG
-# ---------------------------
+
 class KeccakBasedCSPRNG:
     def __init__(self,
                  dir_for_files: Optional[str] = None,
@@ -327,9 +298,7 @@ class KeccakBasedCSPRNG:
                 return a + candidate
 
 
-# ---------------------------
-# CLI
-# ---------------------------
+
 def main():
     parser = argparse.ArgumentParser(description="Keccak-based CSPRNG mixing file-hashes, IVs, time and network stats (no secrets lib)")
     group = parser.add_mutually_exclusive_group(required=True)
